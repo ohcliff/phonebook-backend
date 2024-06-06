@@ -8,6 +8,8 @@ const errorHandler = (error, request, response, next) => {
     console.error(error.message)
     if (error.name === 'CastError') {
         return response.status(400).send({ error: 'malformatted id' })
+    } else if (error.name === 'ValidationError') {
+        return response.status(400).json({ error: error.message})
     }
     next(error)
 }
@@ -27,14 +29,16 @@ app.get('/api/persons', (request, response) => {
 })
 
 app.get('/info', (request, response) => {
-    const total = persons.length
-    const currentDate = new Date()
-    const infoMsg = `
-    <p>Phonebook has info for ${total} people</p>
-    <p>${currentDate}</p>
-    `
-    response.send(infoMsg)
-})
+    Person.find({}).then(persons => {
+        const total = persons.length;
+        const currentDate = new Date();
+        const infoMsg = `
+        <p>Phonebook has info for ${total} people</p>
+        <p>${currentDate}</p>
+        `;
+        response.send(infoMsg);
+    });
+});
 
 app.get('/api/persons/:id', (request, response, next) => {
     Person.findById(request.params.id)
@@ -57,24 +61,14 @@ app.delete('/api/persons/:id', (request, response, next) => {
     .catch(error => next(error))
 })
 
-const generateId = () => {
-    const maxId = persons.length > 0
-    ? Math.max(...persons.map(p => p.id))
-    : 0
-    return maxId + 1
-}
+
 
 app.post('/api/persons', (request, response, next) => {
     const body = request.body
 
-    if (!body.name || !body.number) {
-        return response.status(400).json({ error: 'Name or number is missing' });
-    }
-
     const person = new Person({
         name: body.name,
         number: body.number,
-        id: generateId(),
     })
     
     person.save().then(savedNote => {
@@ -89,7 +83,7 @@ app.put('/api/persons/:id', (request, response, next) => {
         name: body.name,
         number: body.number,
     }
-    Person.findByIdAndUpdate(request.params.id, person, { new: true })
+    Person.findByIdAndUpdate(request.params.id, person, { new: true, runValidators: true, context: 'query' })
         .then(updatedPerson => {
             if (updatedPerson) {
                 response.json(updatedPerson);
